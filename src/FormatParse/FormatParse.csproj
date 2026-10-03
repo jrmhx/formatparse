@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>0.1.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>A lightweight, strongly typed parser for structured human-readable text.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/jrmhx/FormatParse</PackageProjectUrl>
+    <PackageTags>parsing;span;typed;format</PackageTags>
+
+    <Authors>Junming Xing</Authors>
+
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    
+    <RepositoryUrl>https://github.com/jrmhx/FormatParse</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" />
+    <None Include="../../NOTICE" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

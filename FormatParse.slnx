@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/FormatParse.Benchmarks/FormatParse.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/examples/">
+    <Project Path="examples/FormatParse.Example/FormatParse.Example.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/FormatParse/FormatParse.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FormatParse.Tests/FormatParse.Tests.csproj" />
+  </Folder>
+</Solution>
