@@ -42,7 +42,7 @@ jobs:
         id: version
         run: python scripts/release.py project-version
       - name: Test with coverage
-        run: dotnet test tests/FormatParse.Tests/FormatParse.Tests.csproj -c Release --no-build --no-restore --collect:"XPlat Code Coverage" --logger "trx;LogFileName=tests.trx" --results-directory artifacts/tests
+        run: dotnet test tests/FormatParse.Tests/FormatParse.Tests.csproj -c Release --no-build --no-restore --collect:"XPlat Code Coverage" --results-directory artifacts/tests
       - name: Check coverage
         run: python scripts/coverage.py artifacts/tests
       - name: Check benchmark equivalence
