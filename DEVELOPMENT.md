@@ -88,8 +88,38 @@ username. Commit and push your changes, and wait for CI to pass. Then push the
 matching version tag:
 
 ```sh
-git tag -a v0.1.0 -m "FormatParse 0.1.0"
-git push origin v0.1.0
+git add -A
+
+git status
+git diff --cached
+
+git commit -s -m "docs: prepare v0.x.y release"
+
+git push origin master
+
+# release build + tests
+dotnet restore FormatParse.slnx
+
+dotnet build FormatParse.slnx \
+  -c Release \
+  --no-restore \
+  -warnaserror
+
+dotnet test tests/FormatParse.Tests/FormatParse.Tests.csproj \
+  -c Release \
+  --no-build \
+  --no-restore
+
+
+git status
+
+
+git tag -a v0.x.y -m "Release v0.x.y"
+
+
+git show v0.x.y --stat
+
+git push origin v0.x.y
 ```
 
 The workflow revalidates the tagged commit, publishes the package to NuGet,
