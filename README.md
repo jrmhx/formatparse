@@ -7,8 +7,84 @@
 [![NuGet](https://img.shields.io/nuget/v/FormatParse)](https://www.nuget.org/packages/FormatParse)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-Parse structured text into typed .NET values using format-like patterns.
-Targets .NET 8 or above, with no runtime dependencies.
+FormatParse is a lightweight, strongly typed parser for structured text in C#, inspired by Python's [parse](https://github.com/r1chardj0n3s/parse).
+
+<details>
+  <summary> see an example compare with Regex</summary>
+
+  ```csharp
+  // Convert a log message to a strongly typed record.
+
+  // [2026-10-04T10:42:31] [INFO] User alice completed request 550e8400-e29b-41d4-a716-446655440000
+
+  public record LogEntry(
+      DateTime Timestamp,
+      string Level,
+      string User,
+      Guid RequestId
+  );
+  ```
+
+  **GeneratedRegex**
+
+  ```csharp
+  using System.Globalization;
+  using System.Text.RegularExpressions;
+
+  public static partial class RegexLogParser
+  {
+      [GeneratedRegex(
+          @"^\[(?<timestamp>.+?)\] \[(?<level>.+?)\] User (?<user>.+?) completed request (?<requestId>.+)$")]
+      private static partial Regex Pattern();
+
+      public static LogEntry Parse(string input)
+      {
+          var match = Pattern().Match(input);
+
+          if (!match.Success)
+              throw new FormatException("Invalid log entry.");
+
+          return new LogEntry(
+              DateTime.Parse(
+                  match.Groups["timestamp"].Value,
+                  CultureInfo.InvariantCulture),
+              match.Groups["level"].Value,
+              match.Groups["user"].Value,
+              Guid.Parse(match.Groups["requestId"].Value));
+      }
+  }
+
+  LogEntry entry = RegexLogParser.Parse(
+      "[2026-10-04T10:42:31] [INFO] User alice completed request 550e8400-e29b-41d4-a716-446655440000"
+  );
+  ```
+
+  **FormatParse**
+
+  ```csharp
+  using FormatParse;
+
+  var parser = Parser.Compile<LogEntry>(
+      "[{}] [{}] User {} completed request {}");
+
+  LogEntry entry = parser.Parse(
+      "[2026-10-04T10:42:31] [INFO] User alice completed request 550e8400-e29b-41d4-a716-446655440000"
+  );
+  ```
+
+</details>
+
+## Features
+
+- **Span-based parsing** — operate on captured input spans without copy overhead.
+- **Simple `{}` patterns** — describe the input structure without embedding type info in the pattern.
+- **Type-driven conversion** — infer conversions from constructor parameters and members.
+- **Strongly typed results** — parse directly into records, classes, and tuples.
+- **LINQ-style fluent builder** — configure and reorder field bindings with strongly typed member selectors through a method-chaining API.
+- **Compiled parsers** — compile a pattern once and reuse it for repeated parsing.
+- **Culture-aware conversion** — control parsing behavior with `IFormatProvider`.
+- **Zero runtime dependencies** — built on .NET APIs with no additional runtime packages.
+- **.NET 8+** — targets applications using .NET 8 or above.
 
 ## Usage
 
@@ -65,7 +141,7 @@ User bob = parser.Parse("User Bob is 24");
 Compiled parsers are immutable and can be shared across threads. One-shot
 `Parse` and `TryParse` compile on each call; there is no global pattern cache.
 
-### Change the capture order
+### Fluent Builder Pattern
 
 Bind each capture to a member when the input order differs from the constructor:
 
@@ -187,12 +263,5 @@ inverse of .NET formatting. The API may change during 0.x releases.
 
 See [the runnable examples](examples/FormatParse.Example/UsageExamples.cs).
 The [design](DESIGN.md) describes the complete API and roadmap.
-See [benchmarks](benchmarks/README.md) for Regex comparisons and
-[release setup](temp.md) for CI and NuGet publishing.
-To build and test from source with a .NET 8-compatible SDK and runtime:
+See [benchmarks](benchmarks/README.md) for Regex comparisons and the
 
-```sh
-dotnet build src/FormatParse/FormatParse.csproj
-dotnet test tests/FormatParse.Tests/FormatParse.Tests.csproj --collect:"XPlat Code Coverage"
-dotnet run --project examples/FormatParse.Example/FormatParse.Example.csproj
-```
