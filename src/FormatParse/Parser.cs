@@ -21,7 +21,7 @@ public static class Parser
     /// <summary>Starts an explicitly bound parser configuration.</summary>
     /// <typeparam name="T">The target type to construct.</typeparam>
     /// <param name="pattern">A pattern containing literals, {}, and escaped braces.</param>
-    /// <returns>An immutable builder whose Bind calls select capture destinations.</returns>
+    /// <returns>A mutable builder whose Bind calls append capture destinations.</returns>
     /// <exception cref="ArgumentNullException">The pattern is null.</exception>
     /// <exception cref="ArgumentException">The pattern is invalid.</exception>
     public static FormatParseBuilder<T> For<T>(string pattern)
@@ -105,7 +105,8 @@ public static class Parser
     /// <returns>True on success; false for input mismatch or conversion failure.</returns>
     /// <exception cref="ArgumentNullException">The pattern is null.</exception>
     /// <exception cref="ArgumentException">The pattern or target configuration is invalid.</exception>
-    public static bool TryParse<T>(string pattern, string? input, IFormatProvider? provider, [MaybeNullWhen(false)] out T result)
+    public static bool TryParse<T>(string pattern, string? input, IFormatProvider? provider,
+        [MaybeNullWhen(false)] out T result)
     {
         return Compile<T>(pattern).TryParse(input, provider, out result);
     }
@@ -132,7 +133,8 @@ public static class Parser
     /// <returns>True on success; false for input mismatch or conversion failure.</returns>
     /// <exception cref="ArgumentNullException">The pattern is null.</exception>
     /// <exception cref="ArgumentException">The pattern or target configuration is invalid.</exception>
-    public static bool TryParse<T>(string pattern, ReadOnlySpan<char> input, IFormatProvider? provider, [MaybeNullWhen(false)] out T result)
+    public static bool TryParse<T>(string pattern, ReadOnlySpan<char> input, IFormatProvider? provider,
+        [MaybeNullWhen(false)] out T result)
     {
         return Compile<T>(pattern).TryParse(input, provider, out result);
     }

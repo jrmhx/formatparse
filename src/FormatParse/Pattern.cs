@@ -12,46 +12,52 @@ internal sealed class Pattern
     internal string[] Literals { get; }
     internal int CaptureCount => Literals.Length - 1;
 
+    // process raw pattern string into a string[] literals
+    // note that literals will contain an empty head and an empty tail
+    // i.e. for pattern: "{}abc{}def{}" -> literals: ["", "abc", "def", ""]
+    // this will make it easy to maintain an invariant that Literals.Length == CaptureCount + 1
     internal static Pattern Parse(string pattern)
     {
         ArgumentNullException.ThrowIfNull(pattern);
         List<string> literals = [];
         StringBuilder literal = new();
 
-        for (int index = 0; index < pattern.Length; index++)
+        for (int i = 0; i < pattern.Length; i++)
         {
-            char character = pattern[index];
+            char character = pattern[i];
             if (character is not ('{' or '}'))
             {
                 literal.Append(character);
                 continue;
             }
 
-            if (index + 1 < pattern.Length && pattern[index + 1] == character)
+            // {{ or }}
+            if (i + 1 < pattern.Length && pattern[i + 1] == character)
             {
                 literal.Append(character);
-                index++;
+                i++;
                 continue;
             }
 
-            if (character == '{' && index + 1 < pattern.Length && pattern[index + 1] == '}')
+            // {}
+            if (character == '{' && i + 1 < pattern.Length && pattern[i + 1] == '}')
             {
-                if (literals.Count > 0 && literal.Length == 0)
+                if (literals.Count > 0 && literal.Length == 0) // {}{} case
                 {
-                    throw InvalidPattern("Adjacent captures are not supported", index);
+                    throw InvalidPattern("Adjacent captures '{}{}' are not supported", i);
                 }
 
                 literals.Add(literal.ToString());
                 literal.Clear();
-                index++;
+                i++;
                 continue;
             }
 
-            throw InvalidPattern("Expected {}, {{, or }}", index);
+            throw InvalidPattern("Expected {}, {{, or }}", i);
         }
 
         literals.Add(literal.ToString());
-        return new Pattern(literals.ToArray());
+        return new Pattern([.. literals]);
     }
 
     private static ArgumentException InvalidPattern(string message, int position)

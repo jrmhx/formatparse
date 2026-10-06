@@ -7,7 +7,7 @@
 [![NuGet](https://img.shields.io/nuget/v/FormatParse)](https://www.nuget.org/packages/FormatParse)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-FormatParse is a lightweight, strongly typed parser for structured text in C#, inspired by Python's [parse](https://github.com/r1chardj0n3s/parse).
+FormatParse is a lightweight, strongly typed parser for structured text in C#, inspired by Python library [parse](https://github.com/r1chardj0n3s/parse).
 
 <details>
   <summary> see an example compare with Regex</summary>
@@ -46,11 +46,12 @@ FormatParse is a lightweight, strongly typed parser for structured text in C#, i
 
           return new LogEntry(
               DateTime.Parse(
-                  match.Groups["timestamp"].Value,
-                  CultureInfo.InvariantCulture),
-              match.Groups["level"].Value,
-              match.Groups["user"].Value,
-              Guid.Parse(match.Groups["requestId"].Value));
+                match.Groups["timestamp"].Value,
+                CultureInfo.InvariantCulture),
+                match.Groups["level"].Value,
+                match.Groups["user"].Value,
+                Guid.Parse(match.Groups["requestId"].Value),
+              );
       }
   }
 
@@ -161,8 +162,18 @@ duplicate mappings are errors. Member getters are not executed.
 
 A target must be concrete and non-nullable, with exactly one public instance
 constructor. Every parameter needs one capture, including optional parameters.
-A parameterless target can match a literal-only pattern. Builders are immutable:
-each `Bind` returns a new configuration, preserving that field's value type.
+A parameterless target can match a literal-only pattern. Builders are mutable
+and not thread-safe: each `Bind` appends to the same configuration and returns
+a typed field context. Use `Fork()` when you need an independent branch:
+
+```cs
+var root = Parser.For<User>("{}:{}");
+var byName = root.Fork().Bind(x => x.Name).Bind(x => x.Age).Compile();
+var byAge = root.Fork().Bind(x => x.Age).Bind(x => x.Name).Compile();
+```
+
+`Fork()` is also available on field contexts and copies all current bindings.
+`Compile()` creates a stable parser; later builder operations cannot change it.
 
 ## Patterns
 
@@ -238,6 +249,7 @@ succeed; failed calls return no partial result.
 | `Parser.Compile<T>` | Compile positional constructor binding |
 | `Parser.For<T>` | Start explicit binding |
 | `Bind<TValue>(Expression<Func<T, TValue>>)` | Select the next capture's destination |
+| `Fork()` | Copy the current builder configuration into an independent branch |
 | `Compile()` | Finish explicit binding |
 | `FormatParser<T>.Parse` / `TryParse` | Reuse a compiled parser |
 
@@ -264,4 +276,3 @@ inverse of .NET formatting. The API may change during 0.x releases.
 See [the runnable examples](examples/FormatParse.Example/UsageExamples.cs).
 The [design](DESIGN.md) describes the complete API and roadmap.
 See [benchmarks](benchmarks/README.md) for Regex comparisons and the
-

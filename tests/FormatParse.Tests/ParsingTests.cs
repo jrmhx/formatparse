@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Net;
 using System.Numerics;
 
-using FormatParse;
 
 namespace FormatParse.Tests;
 
@@ -14,11 +13,10 @@ public sealed class ParsingTests
     {
         User expected = new("Alice", 18);
         foreach ((string pattern, string input) in new[]
-        {
-            ("User {} is {}", "User Alice is 18"),
-            ("{} is {} years old", "Alice is 18 years old"),
-            ("{}:{}", "Alice:18"),
-        })
+                 {
+                     ("User {} is {}", "User Alice is 18"), ("{} is {} years old", "Alice is 18 years old"),
+                     ("{}:{}", "Alice:18"),
+                 })
         {
             FormatParser<User> parser = Parser.Compile<User>(pattern);
             Assert.Equal(expected, parser.Parse(input));
@@ -47,9 +45,9 @@ public sealed class ParsingTests
     public void LiteralsEscapesAndEmptyCapturesHaveExactSemantics()
     {
         foreach ((string pattern, string input) in new[]
-        {
-            ("", ""), ("ready", "ready"), ("{{ready}}", "{ready}"), ("{{}}", "{}"),
-        })
+                 {
+                     ("", ""), ("ready", "ready"), ("{{ready}}", "{ready}"), ("{{}}", "{}"),
+                 })
         {
             FormatParser<Empty> parser = Parser.Compile<Empty>(pattern);
             Assert.NotNull(parser.Parse(input));
@@ -57,9 +55,9 @@ public sealed class ParsingTests
         }
 
         foreach ((string pattern, string input) in new[]
-        {
-            ("{}", "42"), ("ID={}", "ID=42"), ("{{{}}}", "{42}"), ("{{{{{}}}}}", "{{42}}"),
-        })
+                 {
+                     ("{}", "42"), ("ID={}", "ID=42"), ("{{{}}}", "{42}"), ("{{{{{}}}}}", "{{42}}"),
+                 })
         {
             Assert.Equal(new Number(42), Parser.Parse<Number>(pattern, input));
         }
@@ -73,10 +71,10 @@ public sealed class ParsingTests
     {
         FormatParser<User> parser = Parser.Compile<User>("User {} is {}!");
         foreach (string input in new[]
-        {
-            "user Alice is 18!", "prefix User Alice is 18!", "User Alice is 18!suffix",
-            "User Alice is many!", "User Alice is 9999999999999999999!", "User Alice is 18",
-        })
+                 {
+                     "user Alice is 18!", "prefix User Alice is 18!", "User Alice is 18!suffix",
+                     "User Alice is many!", "User Alice is 9999999999999999999!", "User Alice is 18",
+                 })
         {
             Assert.False(parser.TryParse(input, out User? result));
             Assert.Null(result);
@@ -98,7 +96,7 @@ public sealed class ParsingTests
             ArgumentException error = Assert.Throws<ArgumentException>(() => Parser.Compile<Number>(pattern));
             Assert.Equal("pattern", error.ParamName);
             Assert.Contains("position", error.Message, StringComparison.Ordinal);
-            Assert.Throws<ArgumentException>(() => Parser.TryParse<Number>(pattern, (string?)null, out _));
+            Assert.Throws<ArgumentException>(() => Parser.TryParse<Number>(pattern, null, out _));
         }
 
         Assert.Throws<ArgumentException>(() => Parser.Compile<User>("{}"));
@@ -120,10 +118,10 @@ public sealed class ParsingTests
         Assert.Equal(expected, Parser.Parse<Number>(pattern, input, provider));
         Assert.Equal(expected, Parser.Parse<Number>(pattern, slice));
         Assert.Equal(expected, Parser.Parse<Number>(pattern, slice, provider));
-        Assert.True(Parser.TryParse<Number>(pattern, input, out Number a));
-        Assert.True(Parser.TryParse<Number>(pattern, input, provider, out Number b));
-        Assert.True(Parser.TryParse<Number>(pattern, slice, out Number c));
-        Assert.True(Parser.TryParse<Number>(pattern, slice, provider, out Number d));
+        Assert.True(Parser.TryParse(pattern, input, out Number a));
+        Assert.True(Parser.TryParse(pattern, input, provider, out Number b));
+        Assert.True(Parser.TryParse(pattern, slice, out Number c));
+        Assert.True(Parser.TryParse(pattern, slice, provider, out Number d));
 
         Assert.Equal(expected, parser.Parse(input));
         Assert.Equal(expected, parser.Parse(input, provider));
@@ -145,13 +143,13 @@ public sealed class ParsingTests
         Assert.Throws<ArgumentNullException>(() => Parser.Compile<Number>(null!));
         Assert.Throws<ArgumentNullException>(() => Parser.For<Number>(null!));
         Assert.Throws<ArgumentNullException>(() => Parser.Parse<Number>(null!, "42"));
-        Assert.Throws<ArgumentNullException>(() => Parser.Parse<Number>("{}", (string)null!));
-        Assert.Throws<ArgumentNullException>(() => Parser.TryParse<Number>(null!, (string?)null, out _));
-        Assert.False(Parser.TryParse<Number>("{}", (string?)null, out _));
+        Assert.Throws<ArgumentNullException>(() => Parser.Parse<Number>("{}", null!));
+        Assert.Throws<ArgumentNullException>(() => Parser.TryParse<Number>(null!, null, out _));
+        Assert.False(Parser.TryParse<Number>("{}", null, out _));
 
         FormatParser<Text> parser = Parser.Compile<Text>("{}");
-        Assert.Throws<ArgumentNullException>(() => parser.Parse((string)null!));
-        Assert.False(parser.TryParse((string?)null, out Text? result));
+        Assert.Throws<ArgumentNullException>(() => parser.Parse(null!));
+        Assert.False(parser.TryParse(null, out Text? result));
         Assert.Null(result);
         Assert.Equal("", parser.Parse(ReadOnlySpan<char>.Empty).Value);
     }
@@ -196,7 +194,8 @@ public sealed class ParsingTests
         AssertValue("12.5", 12.5f);
         AssertValue("12.5", 12.5d);
         AssertValue("12.5", 12.5m);
-        AssertValue("123456789012345678901234567890", BigInteger.Parse("123456789012345678901234567890", CultureInfo.InvariantCulture));
+        AssertValue("123456789012345678901234567890",
+            BigInteger.Parse("123456789012345678901234567890", CultureInfo.InvariantCulture));
         AssertValue("true", true);
         AssertValue("A", 'A');
         AssertValue("a83feaf3-207d-47de-9f34-590daf297cc5", Guid.Parse("a83feaf3-207d-47de-9f34-590daf297cc5"));
@@ -321,12 +320,19 @@ public sealed class ParsingTests
     }
 
     private sealed record User(string Name, int Age);
+
     private readonly record struct Number(int Item);
+
     private readonly record struct Value<T>(T Item);
+
     private sealed record Text(string Value);
+
     private sealed record Pair(string Left, string Right);
+
     private readonly record struct Triple(int A, int B, int C);
+
     private sealed record Empty;
+
     private readonly record struct Unsupported;
 
     [Flags]
@@ -367,6 +373,7 @@ public sealed class ParsingTests
     private readonly record struct SpanId(int Value) : ISpanParsable<SpanId>
     {
         public static SpanId Parse(ReadOnlySpan<char> s, IFormatProvider? provider) => new(int.Parse(s, provider));
+
         public static bool TryParse(ReadOnlySpan<char> s, IFormatProvider? provider, out SpanId result)
         {
             bool success = int.TryParse(s, provider, out int value);
@@ -374,13 +381,17 @@ public sealed class ParsingTests
             return success;
         }
 
-        public static SpanId Parse(string s, IFormatProvider? provider) => throw new InvalidOperationException("The span overload should be used.");
-        public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SpanId result) => throw new InvalidOperationException("The span overload should be used.");
+        public static SpanId Parse(string s, IFormatProvider? provider) =>
+            throw new InvalidOperationException("The span overload should be used.");
+
+        public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SpanId result) =>
+            throw new InvalidOperationException("The span overload should be used.");
     }
 
     private readonly record struct StringId(int Value) : IParsable<StringId>
     {
         public static StringId Parse(string s, IFormatProvider? provider) => new(int.Parse(s, provider));
+
         public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out StringId result)
         {
             bool success = int.TryParse(s, provider, out int value);
@@ -391,7 +402,11 @@ public sealed class ParsingTests
 
     private readonly record struct ThrowingValue : IParsable<ThrowingValue>
     {
-        public static ThrowingValue Parse(string s, IFormatProvider? provider) => throw new InvalidOperationException("Converter failure.");
-        public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out ThrowingValue result) => throw new InvalidOperationException("Converter failure.");
+        public static ThrowingValue Parse(string s, IFormatProvider? provider) =>
+            throw new InvalidOperationException("Converter failure.");
+
+        public static bool
+            TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out ThrowingValue result) =>
+            throw new InvalidOperationException("Converter failure.");
     }
 }

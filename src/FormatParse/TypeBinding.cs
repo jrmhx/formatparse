@@ -9,13 +9,15 @@ internal delegate bool ObjectParser<T>(ReadOnlySpan<char> input, ReadOnlySpan<Ra
 
 internal static class TypeBinding<T>
 {
-    internal static ObjectParser<T> Create(int captureCount, FieldBinding[]? bindings = null)
+    internal static ObjectParser<T> Create(int captureCount, IFieldBinding[]? bindings = null)
     {
         Type type = typeof(T);
         ConstructorInfo[] constructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
         if (type.IsAbstract || Nullable.GetUnderlyingType(type) is not null || constructors.Length != 1)
         {
-            throw new ArgumentException($"Target type '{type}' must be concrete and non-nullable, with exactly one public instance constructor.", "pattern");
+            throw new ArgumentException(
+                $"Target type '{type}' must be concrete and non-nullable, with exactly one public instance constructor.",
+                "pattern");
         }
 
         ConstructorInfo constructor = constructors[0];
@@ -34,7 +36,8 @@ internal static class TypeBinding<T>
         List<Expression> body = [Expression.Assign(result, Expression.Default(typeof(T)))];
         List<Expression> stringConversions = [];
         LabelTarget exit = Expression.Label(typeof(bool));
-        MethodInfo captureMethod = typeof(TypeBinding<T>).GetMethod(nameof(GetCapture), BindingFlags.NonPublic | BindingFlags.Static)!;
+        MethodInfo captureMethod =
+            typeof(TypeBinding<T>).GetMethod(nameof(GetCapture), BindingFlags.NonPublic | BindingFlags.Static)!;
 
         for (int index = 0; index < parameters.Length; index++)
         {
@@ -45,9 +48,11 @@ internal static class TypeBinding<T>
             }
 
             values[index] = Expression.Variable(valueType, $"value{index}");
-            Expression capture = Expression.Call(captureMethod, input, captures, Expression.Constant(captureIndices[index]));
+            Expression capture =
+                Expression.Call(captureMethod, input, captures, Expression.Constant(captureIndices[index]));
             Expression converted = ValueConversion.Create(valueType, capture, provider, values[index]);
-            Expression step = Expression.IfThen(Expression.Not(converted), Expression.Return(exit, Expression.Constant(false)));
+            Expression step = Expression.IfThen(Expression.Not(converted),
+                Expression.Return(exit, Expression.Constant(false)));
             if (valueType == typeof(string))
             {
                 stringConversions.Add(step);
@@ -66,7 +71,7 @@ internal static class TypeBinding<T>
             Expression.Block(values, body), input, captures, provider, result).Compile();
     }
 
-    private static int[] GetCaptureIndices(ParameterInfo[] parameters, FieldBinding[]? bindings)
+    private static int[] GetCaptureIndices(ParameterInfo[] parameters, IFieldBinding[]? bindings)
     {
         int[] indices = new int[parameters.Length];
         if (bindings is null)
@@ -81,13 +86,13 @@ internal static class TypeBinding<T>
 
         if (bindings.Length != parameters.Length)
         {
-            throw new ArgumentException("Bind each capture exactly once before compiling.", "bindings");
+            throw new ArgumentException("Bind each capture exactly once before compiling.", nameof(bindings));
         }
 
         Array.Fill(indices, -1);
         for (int captureIndex = 0; captureIndex < bindings.Length; captureIndex++)
         {
-            FieldBinding binding = bindings[captureIndex];
+            IFieldBinding binding = bindings[captureIndex];
             int matchedIndex = -1;
             for (int parameterIndex = 0; parameterIndex < parameters.Length; parameterIndex++)
             {
@@ -99,7 +104,8 @@ internal static class TypeBinding<T>
 
                 if (matchedIndex >= 0)
                 {
-                    throw new ArgumentException($"Member '{binding.Member.Name}' matches multiple constructor parameters.", "bindings");
+                    throw new ArgumentException(
+                        $"Member '{binding.Member.Name}' matches multiple constructor parameters.", nameof(bindings));
                 }
 
                 matchedIndex = parameterIndex;
@@ -107,12 +113,16 @@ internal static class TypeBinding<T>
 
             if (matchedIndex < 0 || parameters[matchedIndex].ParameterType != binding.ValueType)
             {
-                throw new ArgumentException($"Member '{binding.Member.Name}' must match a constructor parameter by name and exact type.", "bindings");
+                throw new ArgumentException(
+                    $"Member '{binding.Member.Name}' must match a constructor parameter by name and exact type.",
+                    nameof(bindings));
             }
 
             if (indices[matchedIndex] >= 0)
             {
-                throw new ArgumentException($"Constructor parameter '{parameters[matchedIndex].Name}' is bound more than once.", "bindings");
+                throw new ArgumentException(
+                    $"Constructor parameter '{parameters[matchedIndex].Name}' is bound more than once.",
+                    nameof(bindings));
             }
 
             indices[matchedIndex] = captureIndex;

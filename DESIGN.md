@@ -63,12 +63,14 @@ public sealed class FormatParser<T>
 public sealed class FormatParseBuilder<T>
 {
     public FieldBindingBuilder<T, TValue> Bind<TValue>(Expression<Func<T, TValue>> selector);
+    public FormatParseBuilder<T> Fork();
     public FormatParser<T> Compile();
 }
 
 public sealed class FieldBindingBuilder<T, TValue>
 {
     public FieldBindingBuilder<T, TNext> Bind<TNext>(Expression<Func<T, TNext>> selector);
+    public FieldBindingBuilder<T, TValue> Fork();
     public FormatParser<T> Compile();
 }
 ```
@@ -146,10 +148,25 @@ access, calls, constants, arithmetic, boxing, numeric casts, and user-defined
 conversions are not used as binding logic. Identity conversions can be unwrapped.
 The parser calls the constructor; it does not assign properties afterward.
 
-Builders are immutable snapshots. Each Bind creates a new ordered binding list
-and returns FieldBindingBuilder<T, TValue>. The typed field node survives in
-that list, so later field policies can retain TValue without routing values
-through object. Adding another Bind or compiling a branch does not mutate others.
+Builders own a private List<IFieldBinding>, preallocated for the capture count.
+Each Bind validates and appends to that same list, then returns a typed
+FieldBindingBuilder<T, TValue> referencing the same configuration. Existing
+entries never move, change, or disappear. Failed validation does not append.
+Builders and field contexts are not thread-safe.
+
+Fork explicitly copies the current list into an independent builder. A field
+context's Fork also preserves its current TValue and field identity. Field
+nodes contain only immutable member/type metadata, so copying the list is
+sufficient; no deep copy is needed. Future mutable field policies would require
+copying their state too. Forks share immutable pattern data, not mutable lists.
+
+Compile snapshots the bindings once and creates a typed runtime delegate.
+FormatParser<T> retains neither the builder nor its list. Compilation does not
+consume the builder, but a successful compilation requires all captures to be
+bound, so further Bind calls fail the existing capture-count check. Repeated
+Compile and Fork calls remain valid. This replaces the previous implicit
+branching behavior: callers that retained a builder to create multiple branches
+must now call Fork explicitly.
 
 Skipping a capture or leaving a constructor parameter unbound is currently an
 error. Nullable fields permit a null *value*, not omission of the capture.
@@ -233,7 +250,7 @@ constructor metadata are required. Native AOT and trimming are not supported.
 
 Tests cover pattern boundaries, configuration failures, constructor binding,
 typed selectors, enum/nullable policies, conversion success/failure, culture,
-exceptions, immutable builder branches, concurrent reuse, pooled captures,
+exceptions, mutable builder ownership, independent forks, concurrent reuse, pooled captures,
 and allocations on selected compiled paths.
 
 CI runs on Linux and Windows. It builds with warnings treated as errors, checks

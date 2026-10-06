@@ -1,7 +1,5 @@
 using System.Linq.Expressions;
 
-using FormatParse;
-
 namespace FormatParse.Tests;
 
 public sealed class BindingTests
@@ -36,24 +34,88 @@ public sealed class BindingTests
     }
 
     [Fact]
-    public void BuildersAreIndependentSnapshots()
+    public void RootForksHaveIndependentBindingSequences()
     {
         FormatParseBuilder<User> root = Parser.For<User>("{}:{}");
-        var forward = root.Bind(x => x.Name).Bind(x => x.Age);
-        var reverse = root.Bind(x => x.Age).Bind(x => x.Name);
+        var forward = root.Fork().Bind(x => x.Name).Bind(x => x.Age);
+        var reverse = root.Fork().Bind(x => x.Age).Bind(x => x.Name);
         Assert.Equal(new User("Alice", 18), forward.Compile().Parse("Alice:18"));
         Assert.Equal(new User("Bob", 24), reverse.Compile().Parse("24:Bob"));
-        Assert.Throws<ArgumentException>(() => root.Compile());
+        Assert.Throws<ArgumentException>(root.Compile);
         Assert.Equal(new User("Alice", 18), forward.Compile().Parse("Alice:18"));
+    }
+
+    [Fact]
+    public void BindAppendsToTheSameConfigurationThroughEveryContext()
+    {
+        var root = Parser.For<User>("{}:{}");
+        var name = root.Bind(x => x.Name);
+        root.Bind(x => x.Age);
+
+        Assert.Equal(new User("Alice", 18), name.Compile().Parse("Alice:18"));
+        Assert.Equal(new User("Bob", 24), root.Compile().Parse("Bob:24"));
+        Assert.Equal(new User("Cara", 30), name.Fork().Compile().Parse("Cara:30"));
+        Assert.Throws<ArgumentException>(() => name.Bind(x => x.Name));
+    }
+
+    [Fact]
+    public void FieldForksPreserveThePrefixAndDivergeIndependently()
+    {
+        var root = Parser.For<ScoredUser>("{}:{}:{}");
+        FieldBindingBuilder<ScoredUser, string> common = root.Bind(x => x.Name);
+        FieldBindingBuilder<ScoredUser, string> byAge = common.Fork();
+        var byScore = common.Fork();
+
+        var ageFirst = byAge.Bind(x => x.Age).Bind(x => x.Score).Compile();
+        Assert.Equal(new ScoredUser("Alice", 18, 90), ageFirst.Parse("Alice:18:90"));
+        Assert.Throws<ArgumentException>(byScore.Compile);
+        Assert.Throws<ArgumentException>(common.Compile);
+        Assert.Throws<ArgumentException>(root.Compile);
+
+        var scoreFirst = byScore.Bind(x => x.Score).Bind(x => x.Age).Compile();
+        common.Bind(x => x.Age).Bind(x => x.Score);
+        Assert.Equal(new ScoredUser("Bob", 24, 80), scoreFirst.Parse("Bob:80:24"));
+        Assert.Equal(new ScoredUser("Cara", 30, 70), root.Compile().Parse("Cara:30:70"));
+        Assert.Equal(new ScoredUser("Alice", 18, 90), ageFirst.Parse("Alice:18:90"));
+    }
+
+    [Fact]
+    public void FailedBindingsDoNotChangeTheConfiguration()
+    {
+        var root = Parser.For<User>("{}:{}");
+        var name = root.Bind(x => x.Name);
+        Assert.Throws<ArgumentException>(() => name.Bind(x => x.Name));
+        Assert.Throws<ArgumentException>(() => root.Bind(x => x.Age + 1));
+        Assert.Throws<ArgumentNullException>(() => root.Bind<int>(null!));
+        Assert.Throws<ArgumentException>(() => root.Compile());
+
+        name.Bind(x => x.Age);
+        Assert.Equal(new User("Alice", 18), root.Compile().Parse("Alice:18"));
+    }
+
+    [Fact]
+    public void CompiledParsersRemainStableAfterLaterConfigurationAttempts()
+    {
+        var root = Parser.For<User>("{}:{}");
+        var complete = root.Bind(x => x.Name).Bind(x => x.Age);
+        var parser = complete.Compile();
+
+        // Compilation requires every capture, so no further append can be valid.
+        Assert.Throws<ArgumentException>(() => root.Bind(x => x.Age));
+        Assert.Throws<ArgumentException>(() => complete.Bind(x => x.Name));
+        var fork = complete.Fork();
+        Assert.Throws<ArgumentException>(() => fork.Bind(x => x.Age));
+        Assert.Equal(new User("Alice", 18), fork.Compile().Parse("Alice:18"));
+        Assert.Equal(new User("Bob", 24), parser.Parse("Bob:24"));
     }
 
     [Fact]
     public void BindingCountsAndDuplicateDestinationsAreConfigurationErrors()
     {
         var root = Parser.For<User>("{}:{}");
-        Assert.Throws<ArgumentException>(() => root.Compile());
+        Assert.Throws<ArgumentException>(root.Compile);
         var first = root.Bind(x => x.Name);
-        Assert.Throws<ArgumentException>(() => first.Compile());
+        Assert.Throws<ArgumentException>(first.Compile);
         Assert.Throws<ArgumentException>(() => first.Bind(x => x.Name));
         Assert.Throws<ArgumentException>(() => first.Bind(x => x.Age).Bind(x => x.Age));
         Assert.Throws<ArgumentException>(() => Parser.For<User>("{}").Bind(x => x.Name).Compile());
@@ -89,8 +151,10 @@ public sealed class BindingTests
     {
         Assert.Throws<ArgumentException>(() => Parser.For<MissingMember>("{}").Bind(x => x.Other).Compile());
         Assert.Throws<ArgumentException>(() => Parser.For<MismatchedMember>("{}").Bind(x => x.Value).Compile());
-        Assert.Throws<ArgumentException>(() => Parser.For<AmbiguousParameters>("{}:{}").Bind(x => x.Value).Bind(x => x.Other).Compile());
-        Assert.Throws<ArgumentException>(() => Parser.For<DuplicateParameter>("{}:{}").Bind(x => x.Value).Bind(x => x.VALUE).Compile());
+        Assert.Throws<ArgumentException>(() =>
+            Parser.For<AmbiguousParameters>("{}:{}").Bind(x => x.Value).Bind(x => x.Other).Compile());
+        Assert.Throws<ArgumentException>(() =>
+            Parser.For<DuplicateParameter>("{}:{}").Bind(x => x.Value).Bind(x => x.VALUE).Compile());
     }
 
     private sealed record User(string Name, int Age)
@@ -98,9 +162,16 @@ public sealed class BindingTests
         public static int StaticValue => 42;
     }
 
+    private sealed record ScoredUser(string Name, int Age, int Score);
+
     private sealed class NormalClass
     {
-        public NormalClass(string name, int age) { Name = name; Age = age; }
+        public NormalClass(string name, int age)
+        {
+            Name = name;
+            Age = age;
+        }
+
         public string Name { get; }
         public int Age { get; }
     }
@@ -122,7 +193,11 @@ public sealed class BindingTests
     }
 
     private sealed record Empty;
-    private sealed record MissingMember(int Value) { public int Other => Value; }
+
+    private sealed record MissingMember(int Value)
+    {
+        public int Other => Value;
+    }
 
     private sealed class MismatchedMember
     {

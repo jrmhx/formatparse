@@ -9,21 +9,22 @@ internal static class ValueConversion
     internal static Expression Create(Type type, Expression input, Expression provider, ParameterExpression result)
     {
         Type? underlying = Nullable.GetUnderlyingType(type);
-        if (underlying is not null)
+        if (underlying is null)
         {
-            ParameterExpression value = Expression.Variable(underlying, "nullableValue");
-            Expression converted = Create(underlying, input, provider, value);
-            return Expression.Block([value],
-                Expression.Assign(result, Expression.Default(type)),
-                Expression.Condition(
-                    Expression.Property(input, nameof(ReadOnlySpan<char>.IsEmpty)),
-                    Expression.Constant(true),
-                    Expression.Condition(converted,
-                        Expression.Block(Expression.Assign(result, Expression.Convert(value, type)), Expression.Constant(true)),
-                        Expression.Constant(false))));
+            return Expression.Call(GetMethod(type), input, provider, result);
         }
 
-        return Expression.Call(GetMethod(type), input, provider, result);
+        ParameterExpression value = Expression.Variable(underlying, "nullableValue");
+        Expression converted = Create(underlying, input, provider, value);
+        return Expression.Block([value],
+            Expression.Assign(result, Expression.Default(type)),
+            Expression.Condition(
+                Expression.Property(input, nameof(ReadOnlySpan<char>.IsEmpty)),
+                Expression.Constant(true),
+                Expression.Condition(converted,
+                    Expression.Block(Expression.Assign(result, Expression.Convert(value, type)),
+                        Expression.Constant(true)),
+                    Expression.Constant(false))));
     }
 
     private static MethodInfo GetMethod(Type type)
@@ -38,7 +39,7 @@ internal static class ValueConversion
             return FindMethod(nameof(TryParseEnum)).MakeGenericMethod(type);
         }
 
-        if (!type.IsByRef && !type.IsPointer && !type.IsByRefLike)
+        if (type is { IsByRef: false, IsPointer: false, IsByRefLike: false })
         {
             Type[] interfaces = type.GetInterfaces();
             if (Implements(interfaces, typeof(ISpanParsable<>), type))
@@ -64,7 +65,8 @@ internal static class ValueConversion
     {
         foreach (Type contract in interfaces)
         {
-            if (contract.IsGenericType && contract.GetGenericTypeDefinition() == definition && contract.GenericTypeArguments[0] == self)
+            if (contract.IsGenericType && contract.GetGenericTypeDefinition() == definition &&
+                contract.GenericTypeArguments[0] == self)
             {
                 return true;
             }
@@ -85,13 +87,15 @@ internal static class ValueConversion
         return Enum.TryParse(input, ignoreCase: false, out result);
     }
 
-    private static bool TryParseSpan<T>(ReadOnlySpan<char> input, IFormatProvider provider, [MaybeNullWhen(false)] out T result)
+    private static bool TryParseSpan<T>(ReadOnlySpan<char> input, IFormatProvider provider,
+        [MaybeNullWhen(false)] out T result)
         where T : ISpanParsable<T>
     {
         return T.TryParse(input, provider, out result);
     }
 
-    private static bool TryParseValue<T>(ReadOnlySpan<char> input, IFormatProvider provider, [MaybeNullWhen(false)] out T result)
+    private static bool TryParseValue<T>(ReadOnlySpan<char> input, IFormatProvider provider,
+        [MaybeNullWhen(false)] out T result)
         where T : IParsable<T>
     {
         // Only types lacking span parsing need a temporary string.

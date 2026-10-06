@@ -85,7 +85,8 @@ public sealed class FormatParser<T>
     /// <param name="input">The complete input to parse.</param>
     /// <param name="result">The constructed target on success; otherwise, default.</param>
     /// <returns>True on success; false for mismatch or conversion failure.</returns>
-    public bool TryParse(ReadOnlySpan<char> input, [MaybeNullWhen(false)] out T result) => TryParse(input, null, out result);
+    public bool TryParse(ReadOnlySpan<char> input, [MaybeNullWhen(false)] out T result) =>
+        TryParse(input, null, out result);
 
     /// <summary>Attempts to parse a span using the supplied conversion provider.</summary>
     /// <param name="input">The complete input to parse.</param>

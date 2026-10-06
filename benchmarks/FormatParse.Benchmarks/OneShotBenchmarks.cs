@@ -3,8 +3,6 @@ using System.Text.RegularExpressions;
 
 using BenchmarkDotNet.Attributes;
 
-using FormatParse;
-
 namespace FormatParse.Benchmarks;
 
 // Include construction cost here; generated regex construction happens at build time.
@@ -14,29 +12,30 @@ public class OneShotBenchmarks
     private const string Input = "User Alice is 42!";
 
     [GlobalSetup]
-    public void Setup()
+    public static void Setup()
     {
-        RegexParsing.Verify(new(true, new User("Alice", 42)), Regex(), CompiledRegex(), FormatParse());
+        RegexParsing.Verify(new ParseResult(true, new User("Alice", 42)), Regex(), CompiledRegex(), FormatParse());
     }
 
     [Benchmark(Baseline = true)]
-    public ParseResult Regex()
+    public static ParseResult Regex()
     {
         var regex = new Regex(RegexParsing.Pattern, RegexParsing.Options, TimeSpan.FromSeconds(1));
         return RegexParsing.Parse(regex, Input);
     }
 
     [Benchmark]
-    public ParseResult CompiledRegex()
+    public static ParseResult CompiledRegex()
     {
-        var regex = new Regex(RegexParsing.Pattern, RegexParsing.Options | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+        var regex = new Regex(RegexParsing.Pattern, RegexParsing.Options | RegexOptions.Compiled,
+            TimeSpan.FromSeconds(1));
         return RegexParsing.Parse(regex, Input);
     }
 
     [Benchmark]
-    public ParseResult FormatParse()
+    public static ParseResult FormatParse()
     {
-        bool success = Parser.TryParse<User>("User {} is {}!", Input, CultureInfo.InvariantCulture, out User value);
+        bool success = Parser.TryParse("User {} is {}!", Input, CultureInfo.InvariantCulture, out User value);
         return new ParseResult(success, value);
     }
 }

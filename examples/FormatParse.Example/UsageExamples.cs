@@ -1,7 +1,5 @@
 using System.Globalization;
 
-using FormatParse;
-
 namespace FormatParse.Example;
 
 internal static class UsageExamples

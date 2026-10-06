@@ -5,6 +5,9 @@
   <Folder Name="/examples/">
     <Project Path="examples/FormatParse.Example/FormatParse.Example.csproj" />
   </Folder>
+  <Folder Name="/playground/">
+    <Project Path="playground/FormatParse.Playground/FormatParse.Playground.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/FormatParse/FormatParse.csproj" />
   </Folder>

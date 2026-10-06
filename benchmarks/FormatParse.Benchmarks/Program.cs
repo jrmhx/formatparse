@@ -12,7 +12,7 @@ if (args is ["--validate"])
         }
     }
 
-    new OneShotBenchmarks().Setup();
+    OneShotBenchmarks.Setup();
     Console.WriteLine("All benchmark parsers agree on success, failure, and typed results.");
     return;
 }
