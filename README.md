@@ -7,71 +7,12 @@
 [![NuGet](https://img.shields.io/nuget/v/FormatParse)](https://www.nuget.org/packages/FormatParse)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-FormatParse is a lightweight, strongly typed parser for structured text in C#, inspired by Python library [parse](https://github.com/r1chardj0n3s/parse).
+FormatParse is a lightweight, thread-safe, strongly typed parser for structured text in C#, inspired by Python library [parse](https://github.com/r1chardj0n3s/parse).
 
 <details>
-  <summary> see an example compare with Regex</summary>
+  <summary> see an example: FormatParse vs. Regex</summary>
 
-  ```csharp
-  // Convert a log message to a strongly typed record.
-
-  // [2026-10-04T10:42:31] [INFO] User alice completed request 550e8400-e29b-41d4-a716-446655440000
-
-  public record LogEntry(
-      DateTime Timestamp,
-      string Level,
-      string User,
-      Guid RequestId
-  );
-  ```
-
-  **GeneratedRegex**
-
-  ```csharp
-  using System.Globalization;
-  using System.Text.RegularExpressions;
-
-  public static partial class RegexLogParser
-  {
-      [GeneratedRegex(
-          @"^\[(?<timestamp>.+?)\] \[(?<level>.+?)\] User (?<user>.+?) completed request (?<requestId>.+)$")]
-      private static partial Regex Pattern();
-
-      public static LogEntry Parse(string input)
-      {
-          var match = Pattern().Match(input);
-
-          if (!match.Success)
-              throw new FormatException("Invalid log entry.");
-
-          return new LogEntry(
-              DateTime.Parse(
-                match.Groups["timestamp"].Value,
-                CultureInfo.InvariantCulture),
-                match.Groups["level"].Value,
-                match.Groups["user"].Value,
-                Guid.Parse(match.Groups["requestId"].Value),
-              );
-      }
-  }
-
-  LogEntry entry = RegexLogParser.Parse(
-      "[2026-10-04T10:42:31] [INFO] User alice completed request 550e8400-e29b-41d4-a716-446655440000"
-  );
-  ```
-
-  **FormatParse**
-
-  ```csharp
-  using FormatParse;
-
-  var parser = Parser.Compile<LogEntry>(
-      "[{}] [{}] User {} completed request {}");
-
-  LogEntry entry = parser.Parse(
-      "[2026-10-04T10:42:31] [INFO] User alice completed request 550e8400-e29b-41d4-a716-446655440000"
-  );
-  ```
+![FormatParse vs. GeneratedRegex](https://raw.githubusercontent.com/jrmhx/FormatParse/master/docs/assets/fp-vs-regex.png)
 
 </details>
 
