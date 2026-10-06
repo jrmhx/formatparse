@@ -7,8 +7,9 @@ namespace FormatParse;
 /// <summary>Parses input using a compiled pattern and binding plan.</summary>
 /// <typeparam name="T">The target type to construct.</typeparam>
 /// <remarks>Instances are immutable and may be used concurrently. Providers and user code must also be thread-safe.</remarks>
-public sealed class FormatParser<T>
+public sealed class FormatParser<T> : IValueParser<T>
 {
+    // use heap allocation when captureCount > 128
     private const int StackCaptureLimit = 128;
     private readonly Pattern _pattern;
     private readonly ObjectParser<T> _parser;
@@ -100,7 +101,7 @@ public sealed class FormatParser<T>
         Span<Range> captures = count <= StackCaptureLimit
             ? stackalloc Range[count]
             : (rented = ArrayPool<Range>.Shared.Rent(count)).AsSpan(0, count);
-
+        // ArrayPool<Range>.Shared.Rent(count) may return pool that larger than count
         try
         {
             if (!PatternMatcher.TryMatch(_pattern, input, captures))

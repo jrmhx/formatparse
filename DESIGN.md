@@ -16,7 +16,7 @@ Four responsibilities stay separate:
 | Pattern | Literal text and capture boundaries |
 | Target T | Constructor shape and value types |
 | Binding | Which constructor argument receives each capture |
-| Field context | A typed place for future parsing and validation policies |
+| Field parser | Default, BCL exact-format, or custom typed capture conversion |
 
 This is not a general grammar, serialization format, or universal inverse of
 .NET formatting. The target T does not need to implement a parsing interface.
@@ -47,7 +47,12 @@ public static class Parser
     public static bool TryParse<T>(string pattern, ReadOnlySpan<char> input, IFormatProvider? provider, [MaybeNullWhen(false)] out T result);
 }
 
-public sealed class FormatParser<T>
+public interface IValueParser<T>
+{
+    bool TryParse(ReadOnlySpan<char> input, IFormatProvider? provider, [MaybeNullWhen(false)] out T value);
+}
+
+public sealed class FormatParser<T> : IValueParser<T>
 {
     public T Parse(string input);
     public T Parse(string input, IFormatProvider? provider);
@@ -63,6 +68,8 @@ public sealed class FormatParser<T>
 public sealed class FormatParseBuilder<T>
 {
     public FieldBindingBuilder<T, TValue> Bind<TValue>(Expression<Func<T, TValue>> selector);
+    public FieldBindingBuilder<T, TValue> Bind<TValue>(Expression<Func<T, TValue>> selector, string format);
+    public FieldBindingBuilder<T, TValue> Bind<TValue>(Expression<Func<T, TValue>> selector, IValueParser<TValue> parser);
     public FormatParseBuilder<T> Fork();
     public FormatParser<T> Compile();
 }
@@ -70,6 +77,8 @@ public sealed class FormatParseBuilder<T>
 public sealed class FieldBindingBuilder<T, TValue>
 {
     public FieldBindingBuilder<T, TNext> Bind<TNext>(Expression<Func<T, TNext>> selector);
+    public FieldBindingBuilder<T, TNext> Bind<TNext>(Expression<Func<T, TNext>> selector, string format);
+    public FieldBindingBuilder<T, TNext> Bind<TNext>(Expression<Func<T, TNext>> selector, IValueParser<TNext> parser);
     public FieldBindingBuilder<T, TValue> Fork();
     public FormatParser<T> Compile();
 }
@@ -156,9 +165,12 @@ Builders and field contexts are not thread-safe.
 
 Fork explicitly copies the current list into an independent builder. A field
 context's Fork also preserves its current TValue and field identity. Field
-nodes contain only immutable member/type metadata, so copying the list is
-sufficient; no deep copy is needed. Future mutable field policies would require
-copying their state too. Forks share immutable pattern data, not mutable lists.
+nodes contain immutable member/type metadata and format/parser references, so
+copying the list is sufficient; no deep copy is needed. Custom parser instances
+are borrowed references shared across forks and compiled plans, not cloned.
+Their owner must keep their behavior stable and ensure concurrent-call safety.
+Future mutable field configuration would require copying its state too.
+Forks share immutable pattern data, not mutable lists.
 
 Compile snapshots the bindings once and creates a typed runtime delegate.
 FormatParser<T> retains neither the builder nor its list. Compilation does not
@@ -196,6 +208,37 @@ For nullable fields, whitespace and the text null are passed to the underlying
 parser; they are not special null markers. Enum conversion does not reject
 undefined numeric values. These are parsing rules, not extra validation.
 
+## Exact and composed field parsing
+
+`Bind(selector)` keeps the default conversion path. `Bind(selector, format)`
+uses the BCL's span TryParseExact for DateTime, DateTimeOffset, DateOnly,
+TimeOnly, TimeSpan, or Guid. Nullable versions have the same empty-to-null
+policy as default nullable fields. Date/time styles are None; TimeSpan uses
+the no-styles overload. Guid has no provider parameter.
+
+ExactValueConversion validates supported types and uses BCL formatting to detect
+invalid format syntax during binding. It does not require sample round-trip
+success or define a new format grammar. Input-specific rejection remains the
+BCL parser's responsibility. Null/empty formats and unsupported types throw
+ArgumentException (ArgumentNullException for null). There is no numeric
+TryParseExact contract here: F2, N2, and C2 are not reverse numeric rules.
+
+`Bind(selector, IValueParser<TValue>)` embeds a typed interface call in the
+compiled constructor plan, with a typed out local and the captured input span.
+It replaces default conversion for that field, including nullable/empty-input
+policy. A custom parser may support a type that default conversion does not.
+No field value is boxed and no runtime reflection is added.
+
+FormatParser<T> implements IValueParser<T>; a nested parser receives the complete
+outer capture and the same resolved provider. Nested patterns use the existing
+grammar and full-match rules. Outer matching determines capture boundaries first;
+composition does not add escaping, quoting, or backtracking. A nested/custom
+false fails the outer TryParse; thrown exceptions propagate unchanged.
+
+The format and parser overloads are distinct for non-null arguments and infer
+TValue from the selector. A bare null second argument is ambiguous: name the
+argument (`format: null` or `parser: null`) or cast it to select the overload.
+
 ## Failure and concurrency
 
 | Condition | Result |
@@ -214,7 +257,9 @@ constructed only after every conversion succeeds.
 Compiled parsers have immutable pattern data and delegates. Input ranges,
 position, parsed values, and rented buffers belong to the current call.
 Instances may be shared concurrently, provided custom parsers, constructors,
-and supplied providers also support concurrent use.
+and supplied providers also support concurrent use. User-supplied IValueParser
+instances must satisfy the same requirement; the library does not synchronize
+or clone them.
 
 ## Internal execution
 
@@ -229,8 +274,9 @@ input span -> PatternMatcher -> capture ranges -> typed conversions -> new T
 Pattern stores decoded literals and capture count. PatternMatcher only locates
 ranges; it does not know the target type. TypeBinding builds a constructor plan
 with capture indices and conversion expressions. Explicit selectors affect that
-plan without changing pattern grammar. ValueConversion supplies the default
-typed conversion expressions.
+plan without changing pattern grammar. FieldBinding supplies default,
+exact-format, or custom typed conversion expressions. ValueConversion preserves
+the default path; ExactValueConversion emits direct span TryParseExact calls.
 
 Reflection and expression compilation occur while building the plan. The
 generated delegate uses typed locals and a direct constructor call, avoiding
@@ -239,7 +285,8 @@ object arrays, per-input reflection invocation, and numeric boxing.
 Up to 128 capture ranges use stack storage; larger calls rent from ArrayPool
 and return the buffer in a finally block. Input spans are borrowed only for the
 call. Returned strings copy their content; results never retain borrowed spans.
-String fields are created after other conversions succeed.
+Default string fields are created after other conversions succeed. Custom
+string parsers run as supplied, rather than being treated as string copies.
 
 Compilation, reference results, string fields, and string-only converters can
 allocate. Selected compiled numeric paths can be allocation-free; this is not
@@ -250,7 +297,8 @@ constructor metadata are required. Native AOT and trimming are not supported.
 
 Tests cover pattern boundaries, configuration failures, constructor binding,
 typed selectors, enum/nullable policies, conversion success/failure, culture,
-exceptions, mutable builder ownership, independent forks, concurrent reuse, pooled captures,
+exceptions, mutable builder ownership, independent forks, exact BCL formats,
+custom/nested parser composition, concurrent reuse, pooled captures,
 and allocations on selected compiled paths.
 
 CI runs on Linux and Windows. It builds with warnings treated as errors, checks
@@ -269,9 +317,9 @@ These features are planned or candidates; no placeholder APIs are shipped.
 
 | Feature | Direction and open questions |
 | --- | --- |
-| Field Format policies | Exact dates, numeric styles and representation rules; argument types and reverse semantics are undecided |
+| Additional field options | Explicit BCL parsing styles; do not infer exact numeric rules from formatting strings |
 | Field Validate policies | Separate value checks from source-text checks, such as fractional digits |
-| Field ParseWith policies | A typed span-based TryParse delegate retaining TValue |
+| Delegate parser adapters | Consider a convenience adapter for IValueParser<T>; no separate ParseWith API is shipped |
 | Per-field provider/options | Culture and NumberStyles belong to field configuration |
 | Skipped captures and defaults | Define ignored input separately from unbound constructor parameters; decide optional/default-value precedence before adding APIs |
 | Transformations | Keep rounding and normalization explicit and separate from parsing |

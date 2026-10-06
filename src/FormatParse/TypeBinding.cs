@@ -50,10 +50,13 @@ internal static class TypeBinding<T>
             values[index] = Expression.Variable(valueType, $"value{index}");
             Expression capture =
                 Expression.Call(captureMethod, input, captures, Expression.Constant(captureIndices[index]));
-            Expression converted = ValueConversion.Create(valueType, capture, provider, values[index]);
+            IFieldBinding? binding = bindings?[captureIndices[index]];
+            Expression converted = binding is null
+                ? ValueConversion.Create(valueType, capture, provider, values[index])
+                : binding.CreateConversion(capture, provider, values[index]);
             Expression step = Expression.IfThen(Expression.Not(converted),
                 Expression.Return(exit, Expression.Constant(false)));
-            if (valueType == typeof(string))
+            if (valueType == typeof(string) && (binding is null || binding.UsesDefaultParser))
             {
                 stringConversions.Add(step);
             }

@@ -24,7 +24,7 @@ internal static class PatternMatcher
 
             if (captureIndex == pattern.CaptureCount - 1)
             {
-                // The final literal fixes the boundary at the end of the input.
+                // final literal fixes the boundary at the end of the input.
                 if (!remaining.EndsWith(separator, StringComparison.Ordinal))
                 {
                     return false;
@@ -34,7 +34,7 @@ internal static class PatternMatcher
             }
             else
             {
-                // The first occurrence determines the boundary; conversion never backtracks.
+                // first occurrence determines the boundary; conversion never backtracks.
                 length = remaining.IndexOf(separator, StringComparison.Ordinal);
                 if (length < 0)
                 {

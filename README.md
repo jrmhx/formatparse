@@ -87,6 +87,38 @@ FormatParse is a lightweight, strongly typed parser for structured text in C#, i
 - **Zero runtime dependencies** — built on .NET APIs with no additional runtime packages.
 - **.NET 8+** — targets applications using .NET 8 or above.
 
+## Supported types
+
+Every field uses `{}`. The destination type selects its conversion; types are not written inside the pattern.
+
+| Destination type | Captured text | Parsed value | Binding |
+| --- | --- | --- | --- |
+| `string` | `Alice` | `"Alice"` | Default |
+| `char` | `A` | `'A'` | Default |
+| `bool` | `true` | `true` | Default |
+| Integers (`int`, `long`, `Int128`, `BigInteger`, etc.) | `42` | `42` | Default |
+| Numbers (`float`, `double`, `decimal`, `Half`) | `3.14` | `3.14` | Default, culture-aware |
+| Enum | `Warning` | `Level.Warning` | Default, case-sensitive |
+| Nullable value type (`int?`, etc.) | Empty field | `null` | Default |
+| `DateTime` | `2026-10-06 13:14:15` | Date and time | Default or exact `"yyyy-MM-dd HH:mm:ss"` |
+| `DateTimeOffset` | `2026-10-06T13:14:15.0000000+02:00` | Date, time and offset | Default or exact `"O"` |
+| `DateOnly` | `2026-10-06` | Date | Default or exact `"yyyy-MM-dd"` |
+| `TimeOnly` | `13:14:15` | Time | Default or exact `"HH:mm:ss"` |
+| `TimeSpan` | `01:02:03` | Duration | Default or exact `"c"` |
+| `Guid` | `550e8400-e29b-41d4-a716-446655440000` | GUID | Default or exact `"D"` |
+| Custom `HexId` | `0xff` | `HexId(255)` | Custom `HexIdParser` |
+| `List<int>` | `[10,20,30]` | Three integers | Custom JSON adapter |
+| `Dictionary<string, List<DateOnly>>` | `{"team":["2026-10-06"]}` | Dictionary of date lists | Custom JSON adapter |
+| Custom `Address` class | `City=Sydney Postcode=2000` | Typed `Address` | Nested compiled parser |
+
+Default conversion also supports types implementing `ISpanParsable<T>` or `IParsable<T>`.
+Use `.Bind(x => x.Date, "yyyy-MM-dd")` for an exact format, or
+`.Bind(x => x.Scores, customParser)` for an `IValueParser<List<int>>`.
+A compiled `FormatParser<Address>` can be passed to `.Bind(x => x.Address, addressParser)`.
+Collections and arbitrary classes are **not** automatically deserialized: the JSON and hexadecimal adapters above are
+[example implementations](examples/FormatParse.Example/ExampleParsers.cs), not package APIs.
+See [the examples guide](examples/README.md) for the complete runnable showcase and concurrent CSV processing.
+
 ## Usage
 
 ```cs
@@ -175,6 +207,49 @@ var byAge = root.Fork().Bind(x => x.Age).Bind(x => x.Name).Compile();
 `Fork()` is also available on field contexts and copies all current bindings.
 `Compile()` creates a stable parser; later builder operations cannot change it.
 
+### Field parsers
+
+Choose how each capture becomes a typed value:
+
+| Binding | Parsing behavior |
+| --- | --- |
+| `Bind(x => x.Field)` | Default conversion for the member's type |
+| `Bind(x => x.Field, "format")` | BCL-backed `TryParseExact` |
+| `Bind(x => x.Field, parser)` | An explicit `IValueParser<TValue>` |
+
+Compiled parsers implement `IValueParser<T>`, so they compose naturally:
+
+```cs
+var point = Parser.Compile<Point>("({}, {})");
+var parser = Parser.For<Event>("{} at {} on {}")
+    .Bind(x => x.Name)
+    .Bind(x => x.Position, point)
+    .Bind(x => x.Date, "yyyy-MM-dd")
+    .Compile();
+
+Event value = parser.Parse("Alice at (10, 20) on 2026-10-06");
+
+public record Point(int X, int Y);
+public record Event(string Name, Point Position, DateOnly Date);
+```
+
+Exact formats support `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`,
+`TimeSpan`, `Guid`, and their nullable forms. Date/time styles are `None`;
+the call's provider is passed through where the BCL supports it. Nullable exact
+fields use an empty capture for null, like default nullable conversion.
+
+A format is **not** a general inverse of `ToString(format)`. Numeric formats
+such as decimal `"F2"`, `"N2"`, and `"C2"` are not supported; supply a custom
+parser instead. Unsupported types and detectably invalid format configurations
+throw during binding. Input mismatches return false from `TryParse`.
+
+Implement `IValueParser<T>` for custom span-based conversion. Custom parsers
+receive the complete capture and the resolved provider, including inside nested
+parsers. They control their own empty/null policy. Exceptions propagate.
+Parser instances are retained, not cloned: keep their behavior stable and make
+them thread-safe when sharing a compiled parser or a builder fork.
+For null-argument checks, use `format: null` or `parser: null` to select an overload.
+
 ## Patterns
 
 | Syntax | Meaning |
@@ -249,6 +324,8 @@ succeed; failed calls return no partial result.
 | `Parser.Compile<T>` | Compile positional constructor binding |
 | `Parser.For<T>` | Start explicit binding |
 | `Bind<TValue>(Expression<Func<T, TValue>>)` | Select the next capture's destination |
+| `Bind(selector, format)` | Use BCL exact-format conversion |
+| `Bind(selector, IValueParser<TValue>)` | Use a custom or composed field parser |
 | `Fork()` | Copy the current builder configuration into an independent branch |
 | `Compile()` | Finish explicit binding |
 | `FormatParser<T>.Parse` / `TryParse` | Reuse a compiled parser |
@@ -259,8 +336,9 @@ parameter documentation are available through the library's XML documentation.
 
 Pattern defines text structure; `T` defines the target and value types; bindings
 select constructor arguments. Typed field contexts leave room for future
-parsing and validation policies. Format, Validate and ParseWith APIs are not
-currently implemented. Source generators, setter-based construction and nested binding
+parsing and validation policies. Fluent Format, Validate and ParseWith policy APIs
+are not currently implemented; exact formats and custom parsers use Bind overloads.
+Source generators, setter-based construction and nested member selectors
 are also outside this release.
 
 Compiled plans use spans, local capture ranges and typed construction delegates.
@@ -273,6 +351,13 @@ not supported.
 FormatParse is for structured text, not general serialization or a universal
 inverse of .NET formatting. The API may change during 0.x releases.
 
-See [the runnable examples](examples/FormatParse.Example/UsageExamples.cs).
+Run the focused examples or the timed concurrent CSV pipeline from the repository root:
+
+```sh
+dotnet run -c Release --project examples/FormatParse.Example
+dotnet run -c Release --project examples/FormatParse.Example -- --csv examples/FormatParse.Example/sample-5mb.csv 4
+```
+
+See [the examples guide](examples/README.md) for custom collection parsers, nested classes and worker options.
 The [design](DESIGN.md) describes the complete API and roadmap.
 See [benchmarks](benchmarks/README.md) for Regex comparisons and the

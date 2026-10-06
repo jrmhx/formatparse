@@ -7,14 +7,27 @@ internal interface IFieldBinding
 {
     internal MemberInfo Member { get; }
     internal Type ValueType { get; }
+    internal bool UsesDefaultParser { get; }
+    internal Expression CreateConversion(Expression input, Expression provider, ParameterExpression result);
 }
 
 internal sealed class FieldBinding<T, TValue> : IFieldBinding
 {
-    internal FieldBinding(Expression<Func<T, TValue>> selector)
+    private readonly string? _format;
+    private readonly IValueParser<TValue>? _parser;
+
+    internal FieldBinding(Expression<Func<T, TValue>> selector, string? format = null,
+        IValueParser<TValue>? parser = null)
     {
         Member = GetMember(selector);
         ValueType = typeof(TValue);
+        if (format is not null)
+        {
+            ExactValueConversion.Validate(ValueType, format);
+        }
+
+        _format = format;
+        _parser = parser;
     }
 
     private static MemberInfo GetMember(Expression<Func<T, TValue>> selector)
@@ -66,4 +79,20 @@ internal sealed class FieldBinding<T, TValue> : IFieldBinding
 
     public MemberInfo Member { get; }
     public Type ValueType { get; }
+    public bool UsesDefaultParser => _format is null && _parser is null;
+
+    public Expression CreateConversion(Expression input, Expression provider, ParameterExpression result)
+    {
+        if (_parser is not null)
+        {
+            // The generated call preserves TValue, including the typed out argument.
+            return Expression.Call(Expression.Constant(_parser, typeof(IValueParser<TValue>)),
+                typeof(IValueParser<TValue>).GetMethod(nameof(IValueParser<TValue>.TryParse))!,
+                input, provider, result);
+        }
+
+        return _format is null
+            ? ValueConversion.Create(ValueType, input, provider, result)
+            : ExactValueConversion.Create(ValueType, _format, input, provider, result);
+    }
 }
