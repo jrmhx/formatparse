@@ -12,7 +12,7 @@ FormatParse is a lightweight, thread-safe, strongly typed parser for structured 
 <details>
   <summary> see an example: FormatParse vs. Regex</summary>
 
-![FormatParse vs. GeneratedRegex](https://raw.githubusercontent.com/jrmhx/FormatParse/master/docs/assets/fp-vs-regex.png)
+![FormatParse vs. GeneratedRegex](https://raw.githubusercontent.com/jrmhx/formatparse/master/docs/assets/fp-vs-regex.png)
 
 </details>
 
